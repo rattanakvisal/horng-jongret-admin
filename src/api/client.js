@@ -1,3 +1,5 @@
+import axios from 'axios'
+
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
 export class ApiError extends Error {
@@ -9,40 +11,43 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiRequest(path, options = {}) {
+const http = axios.create({
+  baseURL: API_BASE,
+  headers: {
+    Accept: 'application/json',
+  },
+})
+
+http.interceptors.request.use((config) => {
   const token = localStorage.getItem('adminToken')
-  const headers = { Accept: 'application/json' }
-
-  if (options.body && !(options.body instanceof FormData)) {
-    headers['Content-Type'] = 'application/json'
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
   }
-  if (token) headers.Authorization = `Bearer ${token}`
+  return config
+})
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: { ...headers, ...(options.headers || {}) },
-    body:
-      options.body && typeof options.body === 'object' && !(options.body instanceof FormData)
-        ? JSON.stringify(options.body)
-        : options.body,
-  })
+export async function apiRequest(path, options = {}) {
+  const method = (options.method || 'GET').toLowerCase()
+  const isFormData = options.body instanceof FormData
 
-  let data = {}
-  const text = await response.text()
-  if (text) {
-    try {
-      data = JSON.parse(text)
-    } catch {
-      data = { message: text }
-    }
-  }
-
-  if (!response.ok) {
+  try {
+    const response = await http.request({
+      url: path,
+      method,
+      data: options.body,
+      headers: {
+        ...(isFormData ? {} : options.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(options.headers || {}),
+      },
+    })
+    return response.data
+  } catch (error) {
+    const data = error.response?.data || {}
     throw new ApiError(data.message || 'Request failed', {
-      status: response.status,
+      status: error.response?.status,
       errors: data.errors,
     })
   }
-
-  return data
 }
+
+export default http

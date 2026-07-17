@@ -84,6 +84,7 @@ function statusType(status) {
     delivering: 'primary',
     completed: 'success',
     cancelled: 'danger',
+    rejected: 'danger',
   }
   return map[status] || 'info'
 }

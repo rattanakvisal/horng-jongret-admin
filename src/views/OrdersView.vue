@@ -37,6 +37,20 @@
             </el-select>
           </template>
         </el-table-column>
+        <el-table-column label="Actions" width="110" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              v-if="canReject(row)"
+              type="danger"
+              link
+              size="small"
+              @click.stop="rejectOrder(row)"
+            >
+              Reject
+            </el-button>
+            <el-tag v-else-if="row.status === 'rejected'" type="danger" size="small">Rejected</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="When" min-width="160">
           <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
         </el-table-column>
@@ -49,6 +63,7 @@
         <p class="meta">{{ current.customer_name }} · {{ current.customer_phone }}</p>
         <p class="meta">{{ current.delivery_address || 'No address' }}</p>
         <p v-if="current.notes" class="meta">Notes: {{ current.notes }}</p>
+        <p class="meta">Status: <el-tag :type="current.status === 'rejected' ? 'danger' : 'info'" size="small">{{ current.status }}</el-tag></p>
         <el-divider />
         <div v-for="item in current.items" :key="item.id" class="line">
           <span>{{ item.quantity }}× {{ item.name }}</span>
@@ -58,26 +73,39 @@
         <div class="line"><span>Subtotal</span><span>${{ Number(current.subtotal).toFixed(2) }}</span></div>
         <div class="line"><span>Delivery</span><span>${{ Number(current.delivery_fee).toFixed(2) }}</span></div>
         <div class="line total"><span>Total</span><strong>${{ Number(current.total).toFixed(2) }}</strong></div>
+        <el-button
+          v-if="canReject(current)"
+          type="danger"
+          style="width:100%;margin-top:16px"
+          @click="rejectOrder(current)"
+        >
+          Reject order
+        </el-button>
       </template>
     </el-drawer>
   </div>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { onMounted, onUnmounted, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { fetchOrders, updateOrderStatus } from '@/api'
 
-const statuses = ['pending', 'confirmed', 'preparing', 'delivering', 'completed', 'cancelled']
+const statuses = ['pending', 'confirmed', 'preparing', 'delivering', 'completed', 'cancelled', 'rejected']
 const loading = ref(false)
 const orders = ref([])
 const search = ref('')
 const status = ref('')
 const drawerOpen = ref(false)
 const current = ref(null)
+let pollTimer = null
 
 function formatDate(v) {
   return v ? new Date(v).toLocaleString() : ''
+}
+
+function canReject(row) {
+  return row && ['pending', 'confirmed'].includes(row.status)
 }
 
 async function load() {
@@ -104,13 +132,53 @@ async function changeStatus(row, next) {
   try {
     const res = await updateOrderStatus(row.id, next)
     row.status = res.data.status
+    if (current.value?.id === row.id) current.value = { ...current.value, status: res.data.status }
     ElMessage.success('Status updated')
   } catch (e) {
     ElMessage.error(e.message)
   }
 }
 
-onMounted(load)
+async function rejectOrder(row) {
+  try {
+    await ElMessageBox.confirm(
+      `Reject order ${row.order_number}? The customer order will be marked as rejected.`,
+      'Reject order',
+      {
+        confirmButtonText: 'Reject',
+        cancelButtonText: 'Cancel',
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger',
+      },
+    )
+  } catch {
+    return
+  }
+
+  try {
+    const res = await updateOrderStatus(row.id, 'rejected')
+    row.status = res.data.status
+    if (current.value?.id === row.id) current.value = { ...current.value, ...res.data }
+    ElMessage.success(`Order ${row.order_number} rejected`)
+  } catch (e) {
+    ElMessage.error(e.message)
+  }
+}
+
+function onOrderNotify() {
+  load()
+}
+
+onMounted(() => {
+  load()
+  pollTimer = setInterval(load, 30000)
+  window.addEventListener('admin:new-order', onOrderNotify)
+})
+
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
+  window.removeEventListener('admin:new-order', onOrderNotify)
+})
 </script>
 
 <style scoped>

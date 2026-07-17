@@ -33,6 +33,14 @@ export const fetchOrder = (id) => apiRequest(`/admin/orders/${id}`)
 export const updateOrderStatus = (id, status) =>
   apiRequest(`/admin/orders/${id}/status`, { method: 'PUT', body: { status } })
 
+export const fetchNotifications = () => apiRequest('/admin/notifications')
+export const fetchUnreadNotificationCount = () =>
+  apiRequest('/admin/notifications/unread-count')
+export const markNotificationRead = (id) =>
+  apiRequest(`/admin/notifications/${id}/read`, { method: 'PUT' })
+export const markAllNotificationsRead = () =>
+  apiRequest('/admin/notifications/read-all', { method: 'PUT' })
+
 export const fetchMessages = () => apiRequest('/admin/messages')
 export const deleteMessage = (id) => apiRequest(`/admin/messages/${id}`, { method: 'DELETE' })
 
