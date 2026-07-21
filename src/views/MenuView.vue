@@ -14,6 +14,10 @@
         <el-select v-model="categoryId" clearable placeholder="Category" style="width:180px" @change="load">
           <el-option v-for="c in categories" :key="c.id" :label="`${c.emoji || ''} ${c.name}`" :value="c.id" />
         </el-select>
+        <el-select v-model="availability" clearable placeholder="Availability" style="width:150px" @change="load">
+          <el-option label="Available" value="1" />
+          <el-option label="Sold out" value="0" />
+        </el-select>
         <el-button @click="load">Search</el-button>
       </div>
 
@@ -31,11 +35,15 @@
         <el-table-column label="Price" width="100">
           <template #default="{ row }">${{ Number(row.price).toFixed(2) }}</template>
         </el-table-column>
-        <el-table-column label="Active" width="90">
+        <el-table-column label="Available" width="120">
           <template #default="{ row }">
-            <el-tag :type="row.is_active ? 'success' : 'info'" size="small">
-              {{ row.is_active ? 'Yes' : 'No' }}
-            </el-tag>
+            <el-switch
+              :model-value="!!row.is_active"
+              inline-prompt
+              active-text="Yes"
+              inactive-text="Out"
+              @change="(v) => toggleAvailable(row, v)"
+            />
           </template>
         </el-table-column>
         <el-table-column label="Actions" width="170" fixed="right">
@@ -63,11 +71,19 @@
         <el-form-item label="Description">
           <el-input v-model="form.description" type="textarea" :rows="3" />
         </el-form-item>
-        <el-form-item label="Image URL">
-          <el-input v-model="form.image" />
+        <el-form-item label="Dish photo">
+          <div class="image-field">
+            <img v-if="imagePreview" :src="imagePreview" class="preview" alt="" />
+            <div class="image-actions">
+              <input ref="fileInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="file-input" @change="onFilePicked" />
+              <el-button @click="$refs.fileInput.click()">Upload image</el-button>
+              <el-button v-if="imagePreview" @click="clearImage">Remove</el-button>
+            </div>
+            <el-input v-model="form.image" placeholder="Or paste an image URL" style="margin-top:10px" />
+          </div>
         </el-form-item>
-        <el-form-item label="Active">
-          <el-switch v-model="form.is_active" />
+        <el-form-item label="Available for order">
+          <el-switch v-model="form.is_active" active-text="Available" inactive-text="Sold out" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -79,7 +95,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   createMenuItem,
@@ -95,8 +111,12 @@ const items = ref([])
 const categories = ref([])
 const search = ref('')
 const categoryId = ref(null)
+const availability = ref('')
 const dialogOpen = ref(false)
 const editingId = ref(null)
+const imageFile = ref(null)
+const imageObjectUrl = ref(null)
+const fileInput = ref(null)
 const form = reactive({
   name: '',
   category_id: null,
@@ -106,7 +126,11 @@ const form = reactive({
   is_active: true,
 })
 
+const imagePreview = computed(() => imageObjectUrl.value || form.image || '')
+
 function resetForm() {
+  clearObjectUrl()
+  imageFile.value = null
   Object.assign(form, {
     name: '',
     category_id: categories.value[0]?.id || null,
@@ -117,6 +141,28 @@ function resetForm() {
   })
 }
 
+function clearObjectUrl() {
+  if (imageObjectUrl.value) {
+    URL.revokeObjectURL(imageObjectUrl.value)
+    imageObjectUrl.value = null
+  }
+}
+
+function clearImage() {
+  clearObjectUrl()
+  imageFile.value = null
+  form.image = ''
+  if (fileInput.value) fileInput.value.value = ''
+}
+
+function onFilePicked(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  clearObjectUrl()
+  imageFile.value = file
+  imageObjectUrl.value = URL.createObjectURL(file)
+}
+
 function openCreate() {
   editingId.value = null
   resetForm()
@@ -125,6 +171,8 @@ function openCreate() {
 
 function openEdit(row) {
   editingId.value = row.id
+  clearObjectUrl()
+  imageFile.value = null
   Object.assign(form, {
     name: row.name,
     category_id: row.category_id,
@@ -136,12 +184,30 @@ function openEdit(row) {
   dialogOpen.value = true
 }
 
+function buildPayload() {
+  const fd = new FormData()
+  fd.append('name', form.name)
+  fd.append('category_id', String(form.category_id))
+  fd.append('price', String(form.price))
+  fd.append('description', form.description || '')
+  fd.append('is_active', form.is_active ? '1' : '0')
+  if (imageFile.value) {
+    fd.append('image_file', imageFile.value)
+  } else if (form.image) {
+    fd.append('image', form.image)
+  } else {
+    fd.append('image', '')
+  }
+  return fd
+}
+
 async function load() {
   loading.value = true
   try {
     const res = await fetchMenuItems({
       search: search.value || undefined,
       category_id: categoryId.value || undefined,
+      is_active: availability.value === '' ? undefined : availability.value,
     })
     items.value = res.data || []
   } catch (e) {
@@ -157,13 +223,18 @@ async function loadCategories() {
 }
 
 async function onSave() {
+  if (!form.name || !form.category_id) {
+    ElMessage.warning('Name and category are required')
+    return
+  }
   saving.value = true
   try {
+    const payload = buildPayload()
     if (editingId.value) {
-      await updateMenuItem(editingId.value, form)
+      await updateMenuItem(editingId.value, payload)
       ElMessage.success('Menu item updated')
     } else {
-      await createMenuItem(form)
+      await createMenuItem(payload)
       ElMessage.success('Menu item created')
     }
     dialogOpen.value = false
@@ -172,6 +243,21 @@ async function onSave() {
     ElMessage.error(e.message)
   } finally {
     saving.value = false
+  }
+}
+
+async function toggleAvailable(row, value) {
+  const prev = row.is_active
+  row.is_active = value
+  try {
+    const fd = new FormData()
+    fd.append('is_active', value ? '1' : '0')
+    const res = await updateMenuItem(row.id, fd)
+    Object.assign(row, res.data)
+    ElMessage.success(value ? 'Marked available' : 'Marked sold out')
+  } catch (e) {
+    row.is_active = prev
+    ElMessage.error(e.message)
   }
 }
 
@@ -199,7 +285,18 @@ onMounted(async () => {
   object-fit: cover;
   display: grid;
   place-items: center;
-  background: var(--brand-50);
+  background: #f3f4f6;
 }
 .thumb.empty { font-size: 1.1rem; }
+.image-field { width: 100%; }
+.preview {
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+  border-radius: 12px;
+  margin-bottom: 10px;
+  background: #f3f4f6;
+}
+.image-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.file-input { display: none; }
 </style>

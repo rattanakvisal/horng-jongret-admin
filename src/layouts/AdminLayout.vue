@@ -99,6 +99,7 @@ let knownUnread = null
 
 const nav = [
   { to: '/', label: 'Dashboard', icon: '📊' },
+  { to: '/kitchen', label: 'Kitchen', icon: '👨‍🍳' },
   { to: '/orders', label: 'Orders', icon: '🛒' },
   { to: '/menu', label: 'Menu Items', icon: '🍽️' },
   { to: '/categories', label: 'Categories', icon: '📁' },

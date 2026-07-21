@@ -16,6 +16,20 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+      '/menu': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/avatars': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/storage': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      // Do not proxy /images — Vite must handle /images/*.png?import for
+      // template assets (e.g. logo). Local files live in admin/public/images.
     },
   },
 })

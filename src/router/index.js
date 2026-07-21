@@ -14,6 +14,7 @@ const routes = [
     meta: { requiresAuth: true },
     children: [
       { path: '', name: 'dashboard', component: () => import('@/views/DashboardView.vue') },
+      { path: 'kitchen', name: 'kitchen', component: () => import('@/views/KitchenView.vue') },
       { path: 'menu', name: 'menu', component: () => import('@/views/MenuView.vue') },
       { path: 'categories', name: 'categories', component: () => import('@/views/CategoriesView.vue') },
       { path: 'orders', name: 'orders', component: () => import('@/views/OrdersView.vue') },

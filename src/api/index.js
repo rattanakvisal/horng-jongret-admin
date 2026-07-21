@@ -15,17 +15,25 @@ export const fetchMenuItems = (params = {}) => {
   const q = new URLSearchParams()
   if (params.search) q.set('search', params.search)
   if (params.category_id) q.set('category_id', params.category_id)
+  if (params.is_active !== undefined && params.is_active !== null && params.is_active !== '') {
+    q.set('is_active', params.is_active)
+  }
   const qs = q.toString()
   return apiRequest(`/admin/menu-items${qs ? `?${qs}` : ''}`)
 }
 export const createMenuItem = (body) => apiRequest('/admin/menu-items', { method: 'POST', body })
-export const updateMenuItem = (id, body) => apiRequest(`/admin/menu-items/${id}`, { method: 'PUT', body })
+export const updateMenuItem = (id, body) =>
+  apiRequest(`/admin/menu-items/${id}`, {
+    method: body instanceof FormData ? 'POST' : 'PUT',
+    body,
+  })
 export const deleteMenuItem = (id) => apiRequest(`/admin/menu-items/${id}`, { method: 'DELETE' })
 
 export const fetchOrders = (params = {}) => {
   const q = new URLSearchParams()
   if (params.search) q.set('search', params.search)
   if (params.status) q.set('status', params.status)
+  if (params.statuses) q.set('statuses', params.statuses)
   const qs = q.toString()
   return apiRequest(`/admin/orders${qs ? `?${qs}` : ''}`)
 }
